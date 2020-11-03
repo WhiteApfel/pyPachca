@@ -2,11 +2,13 @@ import requests
 import os.path
 import typing
 import re
+from fuzzywuzzy import process as fwprocess
+from typing import List
 
 
 class PachcaOAuth:
 	def __init__(self, client_id: str, client_secret: str, redirect_uri: str, refresh_file: str = ".refresh_token",
-				code: str = None):
+				 code: str = None):
 		self.api_url = "https://api.pachca.com/api/shared/v1"
 		self.client_id = client_id
 		self.client_secret = client_secret
@@ -51,8 +53,8 @@ class PachcaOAuth:
 			if re.match("[a-zA-Z0-9-_]{43}", code):
 				return self._get_access_from_request(auth_type="authorization_code")
 			else:
-				raise ValueError("code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
-
+				raise ValueError(
+					"code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
 
 	@property
 	def access_token(self):
@@ -200,7 +202,7 @@ class Message:
 
 class Pachca:
 	def __init__(self, client_id: str, client_secret: str, redirect_uri: str = "https://app.pachca.com",
-				refresh_file: str = ".refresh_token", code: str = None):
+				 refresh_file: str = ".refresh_token", code: str = None):
 		self.OAuth = PachcaOAuth(client_id, client_secret, redirect_uri, refresh_file, code)
 		self.api_url = "https://api.pachca.com/api/shared/v1"
 		self.auth = self.OAuth.auth_headers
@@ -232,14 +234,20 @@ class Pachca:
 			raise ValueError(f"{response.text}")
 
 	def custom_properties(self, entity):
-		if entity in ["Organization", "Client", "Deal"]:
-			response = self._make_requests("GET", "custom_properties")
+		allows = ["Organization", "Client", "Deal", "Организация", "Клиент", "Сделка"]
+		best = fwprocess.extract(entity, allows, limit=1)[0]
+		if best[1] > 70:
+			entity = {
+				"Organization": "Organization", "Организация": "Organization",
+				"Clients": "Clients", "Клиент": "Clients",
+				"Deals": "Deals", "Сделка": "Deals"}[best[1]]
+			response = self._make_requests("GET", f"custom_properties?entity_type={entity}")
 			if response.status_code // 100 == 2:
 				return [Property(property_data) for property_data in response.json()["data"]]
 			else:
 				raise ValueError(f"{response.text}")
 		else:
-			raise ValueError(f"entity должно быть 'Organization', 'Client' или 'Deal'")
+			raise ValueError(f"entity должно быть 'Organization', 'Client' или 'Deal', вы же ввели какое-то говно…")
 
 	def users(self):
 		response = self._make_requests("GET", "users")
@@ -267,15 +275,34 @@ class Pachca:
 		else:
 			raise AttributeError("Не указано ни один идентификатор организации (name, inn)")
 
+	def clients(self, filters: typing.Union[tuple, List[tuple]] = None, union: str = None, sort: tuple = None,
+				per: int = 25, page: int = 1):
+		queries = []
+		if filters:
+			if type(filters) is tuple:
+				filters = [filters]
+			for one_filter in filters:
+				queries.append(f"filter[{one_filter[0]}][{one_filter[2]}]={one_filter[2]}")
+		if union:
+			queries.append(f"union={union}")
+		if sort:
+			queries.append(f"sort[{sort[0]}]")
+		queries.append(f"per={per}&page={page}")
+		response = self._make_requests("GET", f"clients?{'&'.join(queries)}")
+		if response.status_code // 100 == 2:
+			return [Client(client) for client in response.json()["data"]]
+		elif response.status_code // 100 in [4, 5]:
+			raise ValueError(f"{response.text}")
+
 	def create_client(self,
-						full_name: str,
-						phones: typing.Union[int, str, list] = None,
-						emails: typing.Union[int, str, list] = None,
-						address: str = None,
-						organization_id: int = None,
-						additional: str = None,
-						tags: typing.Union[str, list] = None,
-						**properties):
+					  full_name: str,
+					  phones: typing.Union[int, str, list] = None,
+					  emails: typing.Union[int, str, list] = None,
+					  address: str = None,
+					  organization_id: int = None,
+					  additional: str = None,
+					  tags: typing.Union[str, list] = None,
+					  **properties):
 		data = {"full_name": full_name}
 		if phones:
 			data["phones"] = phones if type(phones) is list else [phones]
@@ -318,16 +345,26 @@ class Pachca:
 			elif response.status_code // 100 in [4, 5]:
 				raise ValueError(f"{response.text}")
 
-	def create_deal(self, name: str, client_id: int, stage_id: int, cost: int = 0,
+	def create_deal(self, name: str, client_id: int, stage_id: typing.Union[int, str] = None, cost: int = 0,
 					properties: typing.Union[list, dict] = None,
 					note: typing.Union[dict, str] = None):
+		if not type(stage_id) is int:
+			funnels = self.funnels()
+			if stage_id is None:
+				if len(funnels) == 1:
+					stage_id = funnels[0].stages[0].id
+			elif type(stage_id) is str:
+				stages = []
+				for funnel in funnels:
+					for stage in funnel.stages:
+						stages.append(f"{stage.name}#{stage.id}")
+				stage_id = int(fwprocess.extract(stage_id, stages, limit=1)[0][0].split("#")[1])
 		data = {
 			"name": name,
 			"client_id": client_id,
-			"stage_id": stage_id
+			"stage_id": stage_id,
+			"cost": cost
 		}
-		if cost:
-			data["cost"] = cost
 		if properties:
 			data["custom_properties"] = properties if type(properties) is list else [properties]
 		if note:
@@ -337,6 +374,30 @@ class Pachca:
 			return response.json()["data"]
 		elif response.status_code // 100 in [4, 5]:
 			raise ValueError(f"{response.text}")
+
+	def update_deal(self, id: int, name: str = None, stage_id: typing.Union[int, str] = None, cost: int = None, state: str = None, properties: typing.Union[list, dict] = None):
+		if any([name, stage_id, cost, state, properties]):
+			data = dict()
+			if name:
+				data["name"] = name
+			if stage_id:
+				if type(stage_id) is str:
+					stages = []
+					funnels = self.funnels()
+					for funnel in funnels:
+						for stage in funnel.stages:
+							stages.append(f"{stage.name}#{stage.id}")
+					stage_id = int(fwprocess.extract(stage_id, stages, limit=1)[0][0].split("#")[1])
+				data["stage_id"] = stage_id
+			if cost:
+				data["cost"] = cost
+			if state:
+				data["state"] = state
+			if properties:
+				data["custom_properties"] = properties if type(properties) is list else [properties]
+			self._make_requests("PUT", uri=f"deals/{id}", data={"deal": data})
+		else:
+			AttributeError("Не указано ни одно обновляемое значение")
 
 	def create_message(self, entity_id: int, content: str, entity_type: str = "Deal"):
 		data = {
