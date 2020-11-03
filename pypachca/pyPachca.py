@@ -26,14 +26,7 @@ class PachcaOAuth:
 			"redirect_uri": self.redirect_uri
 		}
 		if auth_type == "authorization_code":
-			if self.code:
-				data["code"] = self.code
-			else:
-				code = input("Введите authorization_code\n>>> ")
-				if re.match("[a-zA-Z0-9-_]{43}", code):
-					data["code"] = code
-				else:
-					raise ValueError("code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
+			data["code"] = self.code
 		elif auth_type == "refresh_token":
 			data["refresh_token"] = self.refresh_token
 		else:
@@ -50,12 +43,16 @@ class PachcaOAuth:
 			raise ValueError(f"{response.text}")
 
 	def _get_access_token(self):
-		if not os.path.exists(self.refresh_file):
-			return self._get_access_from_request(auth_type="authorization_code")
-		elif self.code:
+		if os.path.exists(self.refresh_file):
 			return self._get_access_from_request(auth_type="refresh_token")
 		else:
-			return self._get_access_from_request(auth_type="authorization_code")
+			if not self.code:
+				code = input("Введите authorization_code\n>>> ")
+			if re.match("[a-zA-Z0-9-_]{43}", code):
+				return self._get_access_from_request(auth_type="authorization_code")
+			else:
+				raise ValueError("code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
+
 
 	@property
 	def access_token(self):
@@ -85,7 +82,6 @@ class Stage:
 	def __repr__(self):
 		tmp_dict = {"id": self.id, "name": self.name, "sort": self.sort}
 		return f"<{self.name} #{self.id} sort: {self.sort}>"
-
 
 
 class Funnel:
