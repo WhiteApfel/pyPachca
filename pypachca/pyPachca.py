@@ -1,6 +1,7 @@
 import requests
 import os.path
 import typing
+import re
 
 
 class PachcaOAuth:
@@ -13,7 +14,7 @@ class PachcaOAuth:
 		self.redirect_uri = redirect_uri
 		self.code = code
 
-	def _save_refresh_token(self, token):
+	def _save_refresh_token(self, token: str):
 		with open(self.refresh_file, "w+") as refresh:
 			refresh.write(token)
 
@@ -25,7 +26,14 @@ class PachcaOAuth:
 			"redirect_uri": self.redirect_uri
 		}
 		if auth_type == "authorization_code":
-			data["code"] = self.code
+			if self.code:
+				data["code"] = self.code
+			else:
+				code = input("Введите authorization_code\n>>> ")
+				if re.match("[a-zA-Z0-9-_]{43}", code):
+					data["code"] = code
+				else:
+					raise ValueError("code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
 		elif auth_type == "refresh_token":
 			data["refresh_token"] = self.refresh_token
 		else:
@@ -42,17 +50,20 @@ class PachcaOAuth:
 			raise ValueError(f"{response.text}")
 
 	def _get_access_token(self):
-		if os.path.exists(self.refresh_file):
+		if not os.path.exists(self.refresh_file):
 			return self._get_access_from_request(auth_type="authorization_code")
 		elif self.code:
 			return self._get_access_from_request(auth_type="refresh_token")
 		else:
-			raise AttributeError(
-				f"Отсутствует файл с refresh_token - {self.refresh_file} и код получения токена не указан")
+			return self._get_access_from_request(auth_type="authorization_code")
 
 	@property
 	def access_token(self):
 		return self._get_access_token()
+
+	@property
+	def auth_headers(self):
+		return {'Authorization': f'Bearer {self.access_token}'}
 
 	@property
 	def refresh_token(self):
@@ -61,17 +72,36 @@ class PachcaOAuth:
 
 
 class Stage:
-	def __init__(self, stage):
-		self.id = stage["id"]
+	def __init__(self, stage: dict):
+		self.id = int(stage["id"])
 		self.name = stage["name"]
 		self.sort = int(stage["sort"])
+		self.raw = stage
+
+	def __str__(self):
+		tmp_dict = {"id": self.id, "name": self.name, "sort": self.sort}
+		return str(tmp_dict)
+
+	def __repr__(self):
+		tmp_dict = {"id": self.id, "name": self.name, "sort": self.sort}
+		return f"<{self.name} #{self.id} sort: {self.sort}>"
+
 
 
 class Funnel:
 	def __init__(self, funnel: dict):
-		self.id = funnel["id"]
+		self.id = int(funnel["id"])
 		self.name = funnel["name"]
 		self.stages = [Stage(stage) for stage in funnel["stages"]]
+		self.raw = funnel
+
+	def __str__(self):
+		tmp_dict = {"id": self.id, "name": self.name, "stages": self.stages}
+		return str(tmp_dict)
+
+	def __repr__(self):
+		tmp_dict = {"id": self.id, "name": self.name, "stages": self.stages}
+		return f"<{self.name} #{self.id} {self.stages}>"
 
 
 class Property:
@@ -79,12 +109,13 @@ class Property:
 		self.id = property_data["id"]
 		self.name = property_data["name"]
 		self.data_type = property_data["data_type"]
+		self.raw = property_data
 		if "value" in property_data:
 			self.value = property_data["value"]
 
 
 class User:
-	def __init__(self, user):
+	def __init__(self, user: dict):
 		self.id = user["id"]
 		self.first_name = user["first_name"]
 		self.last_name = user["last_name"]
@@ -94,32 +125,43 @@ class User:
 		self.department = user["department"]
 		self.role = user["role"]
 		self.suspended = user["suspended"]
+		self.raw = user
 
 	@property
 	def full_name(self):
 		return f"{self.first_name} {self.last_name}"
 
+	def __repr__(self):
+		return f"<{self.full_name} @{self.nickname} #{self.id}>"
+
 
 class Organisation:
-	def __init__(self, organisation):
+	def __init__(self, organisation: dict):
 		self.id = organisation["id"]
 		self.name = organisation["name"]
 		self.inn = organisation["inn"]
 		self.properties = [Property(property_data) for property_data in organisation["custom_properties"]]
+		self.raw = organisation
 
 
 class Client:
-	def __init__(self, client):
+	def __init__(self, client: dict):
 		self.id = client["id"]
 		self.client_number = client["client_number"]
+		self.full_name = client["full_name"]
 		self.owner_id = client["owner_id"]
 		self.created_at = client["created_at"]
 		self.phones = client["phones"]
 		self.emails = client["emails"]
+		self.address = client["address"]
 		self.organization_id = client["organization_id"]
 		self.additional = client["additional"]
 		self.list_tags = client["list_tags"]
 		self.properties = [Property(property_data) for property_data in client["custom_properties"]]
+		self.raw = client
+
+	def __repr__(self):
+		return f"<{self.full_name} @{self.client_number} #{self.id}>"
 
 
 class Task:
@@ -133,10 +175,11 @@ class Task:
 		self.status: str = task["status"]
 		self.created_at: str = task["created_at"]
 		self.performer_ids: dict = task["[performer_id"]
+		self.raw = task
 
 
 class Deal:
-	def __init__(self, deal):
+	def __init__(self, deal: dict):
 		self.id = deal["id"]
 		self.owner_id = deal["owner_id"]
 		self.created_at = deal["created_at"]
@@ -146,23 +189,25 @@ class Deal:
 		self.cost = deal["cost"]
 		self.state = deal["state"]
 		self.properties = [Property(property_data) for property_data in deal["custom_properties"]]
+		self.raw = deal
 
 
 class Message:
-	def __init__(self, message):
+	def __init__(self, message: dict):
 		self.id = message["id"]
 		self.entity = message["entity"]
 		self.content = message["content"]
 		self.user_id = message["user_id"]
 		self.created_at = message["created_at"]
+		self.raw = message
 
 
 class Pachca:
-	def __init__(self, client_id: str, client_secret: str, redirect_uri: str, refresh_file: str = ".refresh_token",
-				code: str = None):
+	def __init__(self, client_id: str, client_secret: str, redirect_uri: str = "https://app.pachca.com",
+				refresh_file: str = ".refresh_token", code: str = None):
 		self.OAuth = PachcaOAuth(client_id, client_secret, redirect_uri, refresh_file, code)
 		self.api_url = "https://api.pachca.com/api/shared/v1"
-		self.auth = self.OAuth.access_token
+		self.auth = self.OAuth.auth_headers
 
 	@property
 	def new_auth(self):
@@ -235,8 +280,7 @@ class Pachca:
 						additional: str = None,
 						tags: typing.Union[str, list] = None,
 						**properties):
-		data = {
-			"full_name": full_name}
+		data = {"full_name": full_name}
 		if phones:
 			data["phones"] = phones if type(phones) is list else [phones]
 		if emails:
@@ -252,7 +296,7 @@ class Pachca:
 		if properties:
 			data["custom_properties"] = []
 			for prop_id, value in properties.items():
-				data["custom_properties"].append({'id': int(prop_id), 'value': value})
+				data["custom_properties"].append({"id": int(prop_id), "value": value})
 		response = self._make_requests("POST", "clients", data={"client": data})
 		if response.status_code // 100 == 2:
 			return Client(response.json()["data"])
@@ -272,7 +316,7 @@ class Pachca:
 				data["due_at"] = due_at
 			if performer_ids:
 				data["performer_ids"] = performer_ids if type(performer_ids) is list else [performer_ids]
-			response= self._make_requests("POST", "tasks", data={"task": data})
+			response = self._make_requests("POST", "tasks", data={"task": data})
 			if response.status_code // 100 == 2:
 				return response.json()["data"]
 			elif response.status_code // 100 in [4, 5]:
