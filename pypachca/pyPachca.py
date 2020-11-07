@@ -33,7 +33,9 @@ class PachcaOAuth:
 			data["refresh_token"] = self.refresh_token
 		else:
 			raise ValueError(f"auth_type должно быть 'authorization_code' или 'refresh_token'")
+
 		response = requests.post(f"{self.api_url}/oauth/token", json=data)
+
 		if response.status_code // 100 == 2:
 			response = response.json()
 			self._save_refresh_token(response["refresh_token"])
@@ -72,10 +74,10 @@ class PachcaOAuth:
 
 class Stage:
 	def __init__(self, stage: dict):
-		self.id = int(stage["id"])
-		self.name = stage["name"]
-		self.sort = int(stage["sort"])
-		self.raw = stage
+		self.id: int = stage["id"]
+		self.name: str = stage["name"]
+		self.sort: int = int(stage["sort"])
+		self.raw: dict = stage
 
 	def __str__(self):
 		tmp_dict = {"id": self.id, "name": self.name, "sort": self.sort}
@@ -88,10 +90,10 @@ class Stage:
 
 class Funnel:
 	def __init__(self, funnel: dict):
-		self.id = int(funnel["id"])
-		self.name = funnel["name"]
-		self.stages = [Stage(stage) for stage in funnel["stages"]]
-		self.raw = funnel
+		self.id: int = funnel["id"]
+		self.name: str = funnel["name"]
+		self.stages: List[Stage] = [Stage(stage) for stage in funnel["stages"]]
+		self.raw: dict = funnel
 
 	def __str__(self):
 		tmp_dict = {"id": self.id, "name": self.name, "stages": self.stages}
@@ -104,26 +106,25 @@ class Funnel:
 
 class Property:
 	def __init__(self, property_data: dict):
-		self.id = property_data["id"]
-		self.name = property_data["name"]
-		self.data_type = property_data["data_type"]
-		self.raw = property_data
-		if "value" in property_data:
-			self.value = property_data["value"]
+		self.id: int = property_data["id"]
+		self.name: str = property_data["name"]
+		self.data_type: str = property_data["data_type"]
+		self.raw: dict = property_data
+		self.value = property_data["value"] if "value" in property_data else None
 
 
 class User:
 	def __init__(self, user: dict):
-		self.id = user["id"]
-		self.first_name = user["first_name"]
-		self.last_name = user["last_name"]
-		self.nickname = user["nickname"]
-		self.email = user["email"]
-		self.phone_number = user["phone_number"]
-		self.department = user["department"]
-		self.role = user["role"]
-		self.suspended = user["suspended"]
-		self.raw = user
+		self.id: int = user["id"]
+		self.first_name: str = user["first_name"]
+		self.last_name: str = user["last_name"]
+		self.nickname: str = user["nickname"]
+		self.email: str = user["email"]
+		self.phone_number: str = user["phone_number"]
+		self.department: str = user["department"]
+		self.role: str = user["role"]
+		self.suspended: bool = user["suspended"]
+		self.raw: dict = user
 
 	@property
 	def full_name(self):
@@ -135,28 +136,28 @@ class User:
 
 class Organisation:
 	def __init__(self, organisation: dict):
-		self.id = organisation["id"]
-		self.name = organisation["name"]
-		self.inn = organisation["inn"]
-		self.properties = [Property(property_data) for property_data in organisation["custom_properties"]]
-		self.raw = organisation
+		self.id: int = organisation["id"]
+		self.name: str = organisation["name"]
+		self.inn: str = organisation["inn"]
+		self.properties: List[Property] = [Property(property_data) for property_data in organisation["custom_properties"]]
+		self.raw: dict = organisation
 
 
 class Client:
 	def __init__(self, client: dict):
-		self.id = client["id"]
-		self.client_number = client["client_number"]
-		self.full_name = client["full_name"]
-		self.owner_id = client["owner_id"]
-		self.created_at = client["created_at"]
-		self.phones = client["phones"]
-		self.emails = client["emails"]
-		self.address = client["address"]
-		self.organization_id = client["organization_id"]
-		self.additional = client["additional"]
-		self.list_tags = client["list_tags"]
-		self.properties = [Property(property_data) for property_data in client["custom_properties"]]
-		self.raw = client
+		self.id: int = client["id"]
+		self.client_number: int = client["client_number"]
+		self.full_name: str = client["full_name"]
+		self.owner_id: int = client["owner_id"]
+		self.created_at: str = client["created_at"]
+		self.phones: List[str] = client["phones"]
+		self.emails: List[str] = client["emails"]
+		self.address: str = client["address"]
+		self.organization_id: int = client["organization_id"]
+		self.additional: str = client["additional"]
+		self.list_tags: List[str] = client["list_tags"]
+		self.properties: List[Property] = [Property(property_data) for property_data in client["custom_properties"]]
+		self.raw: dict = client
 
 	def __repr__(self):
 		return f"<{self.full_name} @{self.client_number} #{self.id}>"
@@ -177,27 +178,28 @@ class Task:
 
 
 class Deal:
-	def __init__(self, deal: dict):
-		self.id = deal["id"]
-		self.owner_id = deal["owner_id"]
-		self.created_at = deal["created_at"]
-		self.name = deal["name"]
-		self.client_id = deal["client"]
-		self.stage_id = deal["stage_id"]
-		self.cost = deal["cost"]
-		self.state = deal["state"]
-		self.properties = [Property(property_data) for property_data in deal["custom_properties"]]
-		self.raw = deal
+	def __init__(self, deal: dict, pachca: Pachca = None):
+		self.id: int = deal["id"]
+		self.owner_id: int = deal["owner_id"]
+		self.created_at: str = deal["created_at"]
+		self.name: str = deal["name"]
+		self.client_id: int = deal["client"]
+		self.stage_id: int = deal["stage_id"]
+		self.cost: int = deal["cost"]
+		self.state: str = deal["state"]
+		self.properties: List[Property] = [Property(property_data) for property_data in deal["custom_properties"]]
+		self.raw: dict = deal
 
 
 class Message:
 	def __init__(self, message: dict):
-		self.id = message["id"]
-		self.entity = message["entity"]
-		self.content = message["content"]
-		self.user_id = message["user_id"]
-		self.created_at = message["created_at"]
-		self.raw = message
+		self.id: int = message["id"]
+		self.entity_type: str = message["entity_type"]
+		self.entity_id: int = message["entity_id"]
+		self.content: str = message["content"]
+		self.user_id: int = message["user_id"]
+		self.created_at: str = message["created_at"]
+		self.raw: dict = message
 
 
 class Pachca:
@@ -282,7 +284,7 @@ class Pachca:
 			if type(filters) is tuple:
 				filters = [filters]
 			for one_filter in filters:
-				queries.append(f"filter[{one_filter[0]}][{one_filter[2]}]={one_filter[2]}")
+				queries.append(f"filter[{one_filter[0]}][{one_filter[1]}]={one_filter[2]}")
 		if union:
 			queries.append(f"union={union}")
 		if sort:
