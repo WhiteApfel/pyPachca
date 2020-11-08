@@ -20,7 +20,7 @@ class PachcaOAuth:
 		with open(self.refresh_file, "w+") as refresh:
 			refresh.write(token)
 
-	def _get_access_from_request(self, auth_type: str):
+	async def _get_access_from_request(self, auth_type: str):
 		data = {
 			"client_id": self.client_id,
 			"client_secret": self.client_secret,
@@ -48,12 +48,12 @@ class PachcaOAuth:
 
 	def _get_access_token(self):
 		if os.path.exists(self.refresh_file):
-			return self._get_access_from_request(auth_type="refresh_token")
+			return await self._get_access_from_request(auth_type="refresh_token")
 		else:
 			if not self.code:
 				code = input("Введите authorization_code\n>>> ")
 			if re.match("[a-zA-Z0-9-_]{43}", code):
-				return self._get_access_from_request(auth_type="authorization_code")
+				return await self._get_access_from_request(auth_type="authorization_code")
 			else:
 				raise ValueError(
 					"code должен состоять из латинских символов верхнего и нижнего регистра, цифр и знаков '-'")
@@ -215,7 +215,7 @@ class Pachca:
 		self.auth = new
 		return new
 
-	def _make_requests(self, method: str, uri: str, data: dict = None):
+	async def _make_requests(self, method: str, uri: str, data: dict = None):
 		if method == "GET":
 			response = requests.get(f"{self.api_url}/{uri}", headers=self.auth)
 			if response.status_code == 401:
@@ -229,7 +229,7 @@ class Pachca:
 		return response
 
 	def funnels(self):
-		response = self._make_requests("GET", "funnels")
+		response = await self._make_requests("GET", "funnels")
 		if response.status_code // 100 == 2:
 			return [Funnel(funnel) for funnel in response.json()["data"]]
 		elif response.status_code // 100 in [4, 5]:
@@ -243,7 +243,7 @@ class Pachca:
 				"Organization": "Organization", "Организация": "Organization",
 				"Clients": "Clients", "Клиент": "Clients",
 				"Deals": "Deals", "Сделка": "Deals"}[best[1]]
-			response = self._make_requests("GET", f"custom_properties?entity_type={entity}")
+			response = await self._make_requests("GET", f"custom_properties?entity_type={entity}")
 			if response.status_code // 100 == 2:
 				return [Property(property_data) for property_data in response.json()["data"]]
 			else:
@@ -252,7 +252,7 @@ class Pachca:
 			raise ValueError(f"entity должно быть 'Organization', 'Client' или 'Deal', вы же ввели какое-то говно…")
 
 	def users(self):
-		response = self._make_requests("GET", "users")
+		response = await self._make_requests("GET", "users")
 		if response.status_code // 100 == 2:
 			return [User(user) for user in response.json()["data"]]
 		elif response.status_code // 100 in [4, 5]:
@@ -269,7 +269,7 @@ class Pachca:
 				data["custom_properties"] = []
 				for prop_id, value in properties.items():
 					data["custom_properties"].append({"id": int(prop_id), "value": value})
-			response = self._make_requests("POST", "organizations", data={"organization": data})
+			response = await self._make_requests("POST", "organizations", data={"organization": data})
 			if response.status_code // 100 == 2:
 				return Organisation(response.json()["data"])
 			elif response.status_code // 100 in [4, 5]:
@@ -290,7 +290,7 @@ class Pachca:
 		if sort:
 			queries.append(f"sort[{sort[0]}]")
 		queries.append(f"per={per}&page={page}")
-		response = self._make_requests("GET", f"clients?{'&'.join(queries)}")
+		response = await self._make_requests("GET", f"clients?{'&'.join(queries)}")
 		if response.status_code // 100 == 2:
 			return [Client(client) for client in response.json()["data"]]
 		elif response.status_code // 100 in [4, 5]:
@@ -322,7 +322,7 @@ class Pachca:
 			data["custom_properties"] = []
 			for prop_id, value in properties.items():
 				data["custom_properties"].append({"id": int(prop_id), "value": value})
-		response = self._make_requests("POST", "clients", data={"client": data})
+		response = await self._make_requests("POST", "clients", data={"client": data})
 		if response.status_code // 100 == 2:
 			return Client(response.json()["data"])
 		elif response.status_code // 100 in [4, 5]:
@@ -341,7 +341,7 @@ class Pachca:
 				data["due_at"] = due_at
 			if performer_ids:
 				data["performer_ids"] = performer_ids if type(performer_ids) is list else [performer_ids]
-			response = self._make_requests("POST", "tasks", data={"task": data})
+			response = await self._make_requests("POST", "tasks", data={"task": data})
 			if response.status_code // 100 == 2:
 				return response.json()["data"]
 			elif response.status_code // 100 in [4, 5]:
@@ -371,7 +371,7 @@ class Pachca:
 			data["custom_properties"] = properties if type(properties) is list else [properties]
 		if note:
 			data["note"] = note if type(note) is dict else {"content": note}
-		response = self._make_requests("POST", "deals", data={"deal": data})
+		response = await self._make_requests("POST", "deals", data={"deal": data})
 		if response.status_code // 100 == 2:
 			return response.json()["data"]
 		elif response.status_code // 100 in [4, 5]:
@@ -397,7 +397,11 @@ class Pachca:
 				data["state"] = state
 			if properties:
 				data["custom_properties"] = properties if type(properties) is list else [properties]
-			self._make_requests("PUT", uri=f"deals/{id}", data={"deal": data})
+			response = await self._make_requests("PUT", uri=f"deals/{id}", data={"deal": data})
+			if response.status_code // 100 == 2:
+				return response.json()["data"]
+			elif response.status_code // 100 in [4, 5]:
+				raise ValueError(f"{response.text}")
 		else:
 			AttributeError("Не указано ни одно обновляемое значение")
 
@@ -407,7 +411,7 @@ class Pachca:
 			"entity_id": entity_id,
 			"content": content
 		}
-		response = self._make_requests("POST", "messages", data={"message": data})
+		response = await self._make_requests("POST", "messages", data={"message": data})
 		if response.status_code // 100 == 2:
 			return response.json()["data"]
 		elif response.status_code // 100 in [4, 5]:
