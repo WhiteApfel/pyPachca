@@ -51,8 +51,8 @@ class PachcaOAuth:
 			return await self._get_access_from_request(auth_type="refresh_token")
 		else:
 			if not self.code:
-				code = input("Введите authorization_code\n>>> ")
-			if re.match("[a-zA-Z0-9-_]{43}", code):
+				self.code = input("Введите authorization_code\n>>> ")
+			if re.match("[a-zA-Z0-9-_]{43}", self.code):
 				return await self._get_access_from_request(auth_type="authorization_code")
 			else:
 				raise ValueError(
@@ -84,7 +84,6 @@ class Stage:
 		return str(tmp_dict)
 
 	def __repr__(self):
-		tmp_dict = {"id": self.id, "name": self.name, "sort": self.sort}
 		return f"<{self.name} #{self.id} sort: {self.sort}>"
 
 
@@ -100,7 +99,6 @@ class Funnel:
 		return str(tmp_dict)
 
 	def __repr__(self):
-		tmp_dict = {"id": self.id, "name": self.name, "stages": self.stages}
 		return f"<{self.name} #{self.id} {self.stages}>"
 
 
@@ -377,7 +375,8 @@ class Pachca:
 		elif response.status_code // 100 in [4, 5]:
 			raise ValueError(f"{response.text}")
 
-	def update_deal(self, id: int, name: str = None, stage_id: typing.Union[int, str] = None, cost: int = None, state: str = None, properties: typing.Union[list, dict] = None):
+	def update_deal(self, id: int, name: str = None, stage_id: typing.Union[int, str] = None,
+					cost: int = None, state: str = None, properties: typing.Union[list, dict] = None):
 		if any([name, stage_id, cost, state, properties]):
 			data = dict()
 			if name:
