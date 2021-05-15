@@ -1,2 +1,1 @@
-# pyPachca
-Библиотека для работы с API классной CRM системы Пачка
+Перемещено на [gitlab](https://gitlab.com/whiteapfel/aiopachca)
